@@ -1,0 +1,44 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+
+# Python virtualenv (VERY IMPORTANT)
+panchayat-sahayika/backend/venv/
+
+# Qdrant local data
+panchayat-sahayika/qdrant_data/
+
+# Big training book PDF
+# panchayat-sahayika/backend/Model Training Modules for Training Elected Representatives of Gram Panchayats BOOK FIRST.pdf
+# panchayat-sahayika/backend/Women Friendly Village.pdf
+# panchayat-sahayika/backend/Model Training Modules for Training Elected Representatives of Gram Panchayats BOOK 3.pdf
+# panchayat-sahayika/backend/BOOK2.pdf
+# # Python cache
+__pycache__/
+*.pyc
+
+# Env files
+.env
+*.env
