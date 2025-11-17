@@ -42,3 +42,9 @@ __pycache__/
 # Env files
 .env
 *.env
+
+.venv/
+qdrant_data/
+backend/panchayat_users.db
+*.sqlite
+*.db

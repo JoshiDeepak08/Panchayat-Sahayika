@@ -10,9 +10,9 @@ export default function AnswerCard({ children }) {
         <span className="text-[10px] text-gray-500">
           ✅ Verified by Panchayat Portal
         </span>
-        <button className="text-[10px] text-[#166534] underline">
+        {/* <button className="text-[10px] text-[#166534] underline">
           Apply / Read More ↗
-        </button>
+        </button> */}
       </div>
     </div>
   );

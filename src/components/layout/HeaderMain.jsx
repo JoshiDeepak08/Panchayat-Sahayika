@@ -1,9 +1,11 @@
 import { useLocation, useNavigate } from "react-router-dom";
+import { useAuth } from "../../auth/useAuth.jsx";
 
 export default function HeaderMain() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const isHome = pathname === "/";
+  const { user, logout } = useAuth();
 
   return (
     <header className="w-full bg-primary text-white shadow-soft">
@@ -49,6 +51,44 @@ export default function HeaderMain() {
           <button className="px-3 py-1 text-[11px] rounded-full border border-white/40 text-white rounded-full">
             English
           </button>
+        </div>
+
+        {/* Auth area */}
+        <div className="flex items-center gap-2 text-[11px]">
+          {user ? (
+            <>
+              <span className="hidden sm:inline text-white/90">
+                👤 {user.full_name || user.username}
+              </span>
+              <button
+                onClick={() => navigate("/dashboard")}
+                className="px-3 py-1 rounded-full bg-white/15 hover:bg-white/25 border border-white/30"
+              >
+                Dashboard
+              </button>
+              <button
+                onClick={logout}
+                className="px-3 py-1 rounded-full bg-white/10 hover:bg-white/20 border border-white/30"
+              >
+                Logout
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                onClick={() => navigate("/login")}
+                className="px-3 py-1 rounded-full bg-white/15 hover:bg-white/25 border border-white/30"
+              >
+                Login
+              </button>
+              <button
+                onClick={() => navigate("/register")}
+                className="px-3 py-1 rounded-full bg-white/10 hover:bg-white/20 border border-white/30"
+              >
+                Register
+              </button>
+            </>
+          )}
         </div>
       </div>
     </header>

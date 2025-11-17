@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, Request, Form
+from fastapi import FastAPI, Request, Form, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
@@ -23,13 +23,17 @@ from qdrant_client.models import (
     FieldCondition,
     MatchText,
 )
-from qdrant_client.http import models as qm
+from qdrant_client.http import models as qm  # noqa: F401  (kept if later needed)
 
 from sentence_transformers import SentenceTransformer
 from fastembed import TextEmbedding
 from groq import Groq
 from googletrans import Translator  # Google Translate
 
+from sqlmodel import Field, SQLModel, Session, create_engine, select
+from passlib.context import CryptContext
+from jose import JWTError, jwt
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 
 # ================== CONFIG ==================
 
@@ -67,14 +71,19 @@ SCHEMES_COLLECTION = "samaj_kalyan_vibhag_schemes"
 scheme_embed_model = SentenceTransformer(EMBED_MODEL_NAME_SCHEMES)
 scheme_qdrant = QdrantClient(path=str(BASE_DIR / "qdrant_data"))
 
+origins = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+]
+
 # ---- FastAPI + Templates ----
 app = FastAPI(title="Panchayat Sahayika Unified Backend")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # tighten in prod
+    allow_origins=["*"],
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -82,8 +91,158 @@ templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
 translator = Translator()  # Google translator instance
 
+# ================== AUTH / USERS ==================
+
+DATABASE_URL = "sqlite:///./panchayat_users.db"  # SQLite file in backend folder
+engine = create_engine(DATABASE_URL, echo=False)
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
+
+SECRET_KEY = os.getenv("SECRET_KEY", "baea29ce56f4b02733883b6ae1a76265988d123d5ad3e9d2214dae4646a81ee6")
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 1 day
+
+class User(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    username: str = Field(index=True, unique=True)
+    full_name: Optional[str] = None
+    hashed_password: str
+
+    # profile info (for recommendations / chatbot)
+    district: Optional[str] = None
+    block: Optional[str] = None
+    village_code: Optional[str] = None
+    age: Optional[int] = None
+    gender: Optional[str] = None          # "M"/"F"/"O" or free text
+    interest_tag: Optional[str] = None    # "farmer", "student", etc.
+
+    disability: Optional[str] = None      # e.g. "none", "locomotor", "visual", etc.
+    occupation: Optional[str] = None      # "farmer", "student", "ASHA", "SHG member"...
+    income_bracket: Optional[str] = None  # "BPL", "APL", etc.
+    social_category: Optional[str] = None # "SC", "ST", "OBC", "General", etc.
+
+
+class UserCreate(SQLModel):
+    username: str
+    password: str
+    full_name: Optional[str] = None
+    district: Optional[str] = None
+    block: Optional[str] = None
+    village_code: Optional[str] = None
+    age: Optional[int] = None
+    gender: Optional[str] = None
+    interest_tag: Optional[str] = None
+
+    disability: Optional[str] = None
+    occupation: Optional[str] = None
+    income_bracket: Optional[str] = None
+    social_category: Optional[str] = None
+
+
+class UserRead(SQLModel):
+    id: int
+    username: str
+    full_name: Optional[str] = None
+    district: Optional[str] = None
+    block: Optional[str] = None
+    village_code: Optional[str] = None
+    age: Optional[int] = None
+    gender: Optional[str] = None
+    interest_tag: Optional[str] = None
+
+    disability: Optional[str] = None
+    occupation: Optional[str] = None
+    income_bracket: Optional[str] = None
+    social_category: Optional[str] = None
+
+class UserUpdate(SQLModel):
+    full_name: Optional[str] = None
+    district: Optional[str] = None
+    block: Optional[str] = None
+    village_code: Optional[str] = None
+    age: Optional[int] = None
+    gender: Optional[str] = None
+    interest_tag: Optional[str] = None
+
+    disability: Optional[str] = None
+    occupation: Optional[str] = None
+    income_bracket: Optional[str] = None
+    social_category: Optional[str] = None
+
+class Token(SQLModel):
+    access_token: str
+    token_type: str = "bearer"
+
+
+def create_db_and_tables():
+    SQLModel.metadata.create_all(engine)
+
+
+def get_session():
+    with Session(engine) as session:
+        yield session
+
+
+def _bcrypt_safe(password: str) -> str:
+    """
+    Bcrypt only uses first 72 bytes of the password.
+    To avoid errors, we explicitly cut to 72 bytes.
+    """
+    if password is None:
+        return ""
+    pw_bytes = password.encode("utf-8")
+    return pw_bytes[:72].decode("utf-8", errors="ignore")
+
+
+def get_password_hash(password: str) -> str:
+    safe_pw = _bcrypt_safe(password)
+    return pwd_context.hash(safe_pw)
+
+
+def verify_password(plain: str, hashed: str) -> bool:
+    safe_pw = _bcrypt_safe(plain)
+    return pwd_context.verify(safe_pw, hashed)
+
+
+def create_access_token(data: dict) -> str:
+    return jwt.encode(data, SECRET_KEY, algorithm=ALGORITHM)
+
+
+def get_user_by_username(session: Session, username: str) -> Optional[User]:
+    stmt = select(User).where(User.username == username)
+    return session.exec(stmt).first()
+
+
+async def get_current_user(
+    token: str = Depends(oauth2_scheme),
+    session: Session = Depends(get_session),
+) -> User:
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username: Optional[str] = payload.get("sub")
+        if username is None:
+            raise credentials_exception
+    except JWTError:
+        raise credentials_exception
+
+    user = get_user_by_username(session, username=username)
+    if not user:
+        raise credentials_exception
+    return user
+
+
+@app.on_event("startup")
+def on_startup():
+    create_db_and_tables()
 
 # ================== COMMON LANGUAGE HELPERS ==================
+
 
 def contains_devanagari(text: str) -> bool:
     """Check if text has any Devanagari characters."""
@@ -173,6 +332,7 @@ def _convert_markdown_bold_to_html(text: str) -> str:
 
 # ================== DOCS RAG PIPELINE ==================
 
+
 def build_docs_system_prompt() -> str:
     """
     System prompt for docs:
@@ -217,6 +377,7 @@ def retrieve_docs_context(query: str, top_k: int = 8) -> List[Dict[str, Any]]:
 def generate_docs_answer_raw(
     query: str,
     history: List[Dict[str, str]],
+    user_meta: Dict[str, Any] | None = None,
 ) -> Tuple[str, List[Dict[str, Any]]]:
     """
     Returns raw answer in Hindi-ish language (LLM decides, but system prompt nudges to Hindi).
@@ -228,8 +389,20 @@ def generate_docs_answer_raw(
         c["text"] for c in contexts if c["text"]
     )
 
+    # 👤 personalise a bit
+    user_ctx = build_user_context(user_meta)
+
+    system_prompt = build_docs_system_prompt()
+    if user_ctx:
+        system_prompt += (
+            "\n\nउपयोगकर्ता प्रोफाइल (उदाहरणों को practical banane ke liye):\n"
+            f"{user_ctx}\n"
+            "जवाब में आप user ki स्थिति ke हिसाब से छोटा सा context de sakte hain "
+            "(jaise किसान, छात्र, दिव्यांग इत्यादि)."
+        )
+
     messages = [
-        {"role": "system", "content": build_docs_system_prompt()},
+        {"role": "system", "content": system_prompt},
     ]
 
     # include a few last turns from history (server-side only)
@@ -291,6 +464,7 @@ def load_schemes() -> List[Dict[str, Any]]:
         s.setdefault("benefit", "")
         s.setdefault("apply_process", "")
         s.setdefault("apply_link", "")
+        s.setdefault("source_url", "")
         s.setdefault("type", s.get("type", "scheme"))
     return data
 
@@ -467,9 +641,61 @@ def _fmt_scheme_card(s: Dict[str, Any]) -> str:
     return "\n".join(bits)
 
 
-def build_schemes_answer(question: str, schemes: List[Dict[str, Any]]) -> str:
+def build_user_context(user_meta: dict | None) -> str:
+    """Convert user profile info into natural-language context for LLM."""
+    if not user_meta:
+        return ""
+
+    district = user_meta.get("district")
+    block = user_meta.get("block")
+    village = user_meta.get("village_code")
+    age = user_meta.get("age")
+    gender = user_meta.get("gender")
+    interest = user_meta.get("interest_tag")
+
+    disability = user_meta.get("disability")
+    occupation = user_meta.get("occupation")
+    income_bracket = user_meta.get("income_bracket")
+    social_category = user_meta.get("social_category")
+
+    parts = []
+
+    if district:
+        parts.append(f"जिला {district}")
+    if block:
+        parts.append(f"ब्लॉक {block}")
+    if village:
+        parts.append(f"गाँव कोड {village}")
+    if age:
+        parts.append(f"आयु {age} वर्ष")
+    if gender:
+        parts.append(f"लिंग {gender}")
+    if occupation:
+        parts.append(f"पेशा: {occupation}")
+    if income_bracket:
+        parts.append(f"आय वर्ग: {income_bracket}")
+    if social_category:
+        parts.append(f"सोशल कैटेगरी: {social_category}")
+    if disability and disability.lower() not in ("none", "nahin", "no"):
+        parts.append(f"विशेष आवश्यकताएँ / दिव्यांगता: {disability}")
+    if interest:
+        parts.append(f"रुचि: {interest}")
+
+    if not parts:
+        return ""
+
+    return "उपयोगकर्ता की जानकारी: " + ", ".join(parts) + ". "
+
+
+
+def build_schemes_answer(
+    question: str,
+    schemes: List[Dict[str, Any]],
+    user_meta: Dict[str, Any] | None = None,
+) -> str:
     """
     Build Hindi-centric, LLM-generated answer for schemes.
+    Personalised slightly using user_meta (occupation, disability, etc.).
     """
     if not schemes:
         return (
@@ -477,6 +703,8 @@ def build_schemes_answer(question: str, schemes: List[Dict[str, Any]]) -> str:
             "कृपया अलग शब्दों में पूछें, या ज़िला/विभाग/श्रेणी लिखें।\n\n"
             "**English:** No strong matches. Try different words or add location/department."
         )
+
+    user_ctx = build_user_context(user_meta)
 
     q_low = question.lower()
     want_apply = any(w in q_low for w in [
@@ -486,7 +714,7 @@ def build_schemes_answer(question: str, schemes: List[Dict[str, Any]]) -> str:
         "लाभ", "benefit", "paisa", "₹", "kitna", "कितना", "राशि"
     ])
     want_elig = any(w in q_low for w in [
-        "পात्रता", "पात्रता", "eligibility", "kaun", "कौन", "किसको", "kis ko", "kisko"
+        "पात्रता", "eligibility", "kaun", "कौन", "किसको", "kis ko", "kisko"
     ])
 
     if not GROQ_API_KEY:
@@ -531,10 +759,16 @@ def build_schemes_answer(question: str, schemes: List[Dict[str, Any]]) -> str:
 
     focus_text = "\n".join(focus_lines) if focus_lines else "- Follow the general rules below."
 
+    # 👤 personalisation text
+    profile_text = user_ctx or "कोई अतिरिक्त उपयोगकर्ता जानकारी उपलब्ध नहीं है। अगर जानकारी ना हो तो generic जवाब दें।"
+
     prompt = f"""
 You are **Panchayat Sahayika**, a friendly, polite and knowledgeable AI assistant created to help rural citizens of India. 
 Your main goal is to explain information in very **simple, clear, human-like Hindi**, so that even villagers, elderly people, 
 and first-time smartphone users can easily understand.
+
+User profile (for context, don't repeat fully, just use it smartly in examples):
+{profile_text}
 
 You must use **only** the information given in the schemes context below. 
 Do NOT invent or guess any benefits, eligibility rules, amounts or links that are not present.
@@ -564,10 +798,8 @@ Include these only if available in provided context:
 - कैसे और कहाँ आवेदन करना है (आवेदन प्रक्रिया)  
 - लिंक हो तो बताएं  
 
-
-Missing data → write “उपलब्ध नहीं” naturally.
-
 If multiple schemes match, explain **2–3** clearly but naturally.
+Missing data → write “उपलब्ध नहीं” naturally.
 
 ### 🟡 ALWAYS END WITH:
 "अगर ज़रूरत हो तो अपने ग्राम पंचायत या CSC केंद्र से मदद लें।"
@@ -636,11 +868,13 @@ def _should_use_schemes(question: str, schemes: List[Dict[str, Any]]) -> bool:
 
 # ================== MODELS FOR JSON /ask ==================
 
+
 class AskRequest(BaseModel):
     question: str
     ui_lang: str = "hi"        # "hi" or "en"
     mode: str = "auto"         # "auto" | "docs" | "schemes"
     history: List[Dict[str, str]] = []
+    user_meta: Dict[str, Any] | None = None
 
 
 class AskResponse(BaseModel):
@@ -648,7 +882,79 @@ class AskResponse(BaseModel):
     sources: List[Dict[str, Any]] = []
 
 
+class SchemeCard(SQLModel):
+    title: str
+    subtitle: Optional[str] = None
+    verified: bool = True
+    badges: List[str] = []
+    apply_url: Optional[str] = None
+    read_more_url: Optional[str] = None
+
+
+# ================== PERSONALISED RECOMMENDATIONS API ==================
+
+
+@app.get("/user/recommended-schemes", response_model=List[SchemeCard])
+def recommended_schemes(current_user: User = Depends(get_current_user)):
+    # Build simple query text from profile
+    parts = []
+
+    if current_user.district:
+        parts.append(current_user.district)
+    if current_user.block:
+        parts.append(current_user.block)
+    if current_user.gender:
+        parts.append(current_user.gender)
+    if current_user.age:
+        parts.append(f"age {current_user.age}")
+    if current_user.interest_tag:
+        parts.append(current_user.interest_tag)
+
+    # 🔴 NEW – these strongly influence scheme matching
+    if current_user.occupation:
+        parts.append(current_user.occupation)
+    if current_user.disability and current_user.disability.lower() not in ("none", "nahin", "no"):
+        parts.append("divyang")
+        parts.append(current_user.disability)
+    if current_user.income_bracket:
+        parts.append(current_user.income_bracket)
+    if current_user.social_category:
+        parts.append(current_user.social_category)
+
+    question = " ".join(parts) or "gramin yojana"
+
+    schemes, _total = search_schemes(
+        question=question,
+        limit=5,
+        page=1,
+        min_score=0.20,
+        category=None,
+        department=None,
+        typ=None,
+    )
+
+    cards: List[SchemeCard] = []
+    for s in schemes:
+        title = (
+            (s.get("name_hi") or "") +
+            (" / " + s.get("name_en", "") if s.get("name_en") else "")
+        ).strip(" /")
+        subtitle = s.get("description_hi") or s.get("description_en") or ""
+        badges = [s.get("department", ""), s.get("category", "")]
+        cards.append(
+            SchemeCard(
+                title=title or "Yojana",
+                subtitle=subtitle,
+                verified=True,
+                badges=[b for b in badges if b],
+                apply_url=s.get("apply_link") or None,
+                read_more_url=s.get("source_url") or None,
+            )
+        )
+    return cards
+
 # ================== ROUTES (HTML DEMO) ==================
+
 
 @app.get("/", response_class=HTMLResponse)
 async def get_home(
@@ -727,12 +1033,14 @@ async def post_query(
 
 # ================== JSON API FOR REACT CHAT ==================
 
+
 @app.post("/ask", response_model=AskResponse)
 def ask(req: AskRequest):
     """
     Used by React ChatScreen.
     - Decides schemes vs docs (or forced by req.mode)
     - Applies translation for UI lang
+    - Uses user_meta for slight personalisation
     - Returns { response, sources } that your ChatScreen understands
     """
 
@@ -742,9 +1050,11 @@ def ask(req: AskRequest):
     else:
         target_lang = "hi" if contains_devanagari(req.question) else "hinglish"
 
+    # 👤 user profile from frontend
+    user_meta = req.user_meta or None
+
     schemes: List[Dict[str, Any]] = []
     doc_sources: List[Dict[str, Any]] = []
-
     use_schemes = False
 
     if req.mode in ("schemes", "auto"):
@@ -763,7 +1073,7 @@ def ask(req: AskRequest):
             use_schemes = _should_use_schemes(req.question, schemes)
 
     if use_schemes:
-        base_answer = build_schemes_answer(req.question, schemes)
+        base_answer = build_schemes_answer(req.question, schemes, user_meta=user_meta)
         sources = [
             {
                 "name_hi": s.get("name_hi"),
@@ -776,7 +1086,11 @@ def ask(req: AskRequest):
             for s in schemes
         ]
     else:
-        base_answer, doc_sources = generate_docs_answer_raw(req.question, req.history)
+        base_answer, doc_sources = generate_docs_answer_raw(
+            req.question,
+            req.history,
+            user_meta=user_meta,
+        )
         sources = doc_sources
 
     final_text = translate_answer(base_answer, target_lang)
@@ -784,7 +1098,54 @@ def ask(req: AskRequest):
 
     return AskResponse(response=final_html, sources=sources)
 
-   
+
+# ================== AUTH ROUTES ==================
+
+
+@app.post("/auth/register", response_model=UserRead)
+def register(user_in: UserCreate, session: Session = Depends(get_session)):
+    existing = get_user_by_username(session, user_in.username)
+    if existing:
+        raise HTTPException(status_code=400, detail="Username already registered")
+
+    user = User(
+        username=user_in.username,
+        full_name=user_in.full_name,
+        hashed_password=get_password_hash(user_in.password),
+        district=user_in.district,
+        block=user_in.block,
+        village_code=user_in.village_code,
+        age=user_in.age,
+        gender=user_in.gender,
+        interest_tag=user_in.interest_tag,
+
+        disability=user_in.disability,
+        occupation=user_in.occupation,
+        income_bracket=user_in.income_bracket,
+        social_category=user_in.social_category,
+    )
+    session.add(user)
+    session.commit()
+    session.refresh(user)
+    return user
+
+
+@app.post("/auth/login", response_model=Token)
+def login(
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    session: Session = Depends(get_session),
+):
+    user = get_user_by_username(session, form_data.username)
+    if not user or not verify_password(form_data.password, user.hashed_password):
+        raise HTTPException(status_code=400, detail="Incorrect username or password")
+
+    token = create_access_token({"sub": user.username})
+    return Token(access_token=token)
+
+
+@app.get("/me", response_model=UserRead)
+def read_me(current_user: User = Depends(get_current_user)):
+    return current_user
 
 
 @app.get("/health")
@@ -795,3 +1156,21 @@ def health():
         "schemes_collection": SCHEMES_COLLECTION,
         "embed_model_schemes": EMBED_MODEL_NAME_SCHEMES,
     }
+    
+    
+@app.put("/me", response_model=UserRead)
+def update_me(
+    user_update: UserUpdate,
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    data = user_update.dict(exclude_unset=True)
+
+    for field, value in data.items():
+        setattr(current_user, field, value)
+
+    session.add(current_user)
+    session.commit()
+    session.refresh(current_user)
+    return current_user
+
