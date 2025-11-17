@@ -47,8 +47,12 @@
 //     </div>
 //   );
 // }
+
+
 // src/components/layout/AppShell.jsx
 import HeaderMain from "./HeaderMain.jsx";
+import ChatBubble from "../ui/ChatBubble.jsx";   // ← ADD THIS
+import { Outlet } from "react-router-dom";      // ← only needed if you use <Outlet />
 
 export default function AppShell({ children }) {
   return (
@@ -58,8 +62,12 @@ export default function AppShell({ children }) {
 
       {/* Main area: full width, no mx-auto / no px-6 */}
       <main className="flex-1 overflow-hidden">
-        {children}
+        {/* If routing uses children, use children. If using <Outlet />, fallback to Outlet */}
+        {children || <Outlet />}
       </main>
+
+      {/* Floating chatbot bubble on all pages except home & chat */}
+      <ChatBubble />
     </div>
   );
 }
