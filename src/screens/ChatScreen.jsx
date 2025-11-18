@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import AnswerCard from "../components/ui/AnswerCard.jsx";
 import { useAuth } from "../auth/useAuth.jsx";
+import { useLanguage } from "../context/LanguageContext.jsx";
 import SCHEMES from "../data/samaj_kalyan_vibhag_clean_typed.json";
 
 // Configure API base once; override via .env: VITE_API_BASE=http://127.0.0.1:8000
@@ -67,8 +68,7 @@ function SchemeDetailsModal({ scheme, onClose }) {
 
         {/* Meta line */}
         <p className="text-xs text-gray-500 mb-4">
-          Scheme / Yojana{" "}
-          {scheme.category ? `• ${scheme.category}` : ""}{" "}
+          Scheme / Yojana {scheme.category ? `• ${scheme.category}` : ""}{" "}
           {scheme.department ? `• ${scheme.department}` : ""}
         </p>
 
@@ -117,6 +117,8 @@ function SchemeDetailsModal({ scheme, onClose }) {
 export default function ChatScreen() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { lang } = useLanguage(); // global site language (hi/en)
+  const isHi = lang === "hi";
 
   // 🔑 storage key is per-user now
   const storageKey = user?.username
@@ -129,7 +131,7 @@ export default function ChatScreen() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // 🔤 UI language (Hindi / English)
+  // 🔤 UI language for chat responses (KEPT LOCAL - chat can use its own toggle)
   const [uiLang, setUiLang] = useState("hi"); // "hi" or "en"
 
   // 🎤 Mic listening status
@@ -146,15 +148,10 @@ export default function ChatScreen() {
   const [selectedScheme, setSelectedScheme] = useState(null);
 
   // ---------- helpers for scheme popup & filtering ----------
-
-  // common function: try to find a matching scheme in JSON for a label
   function getSchemeByLabel(label) {
     if (!label) return null;
 
-    const norm = label
-      .replace(/[()]/g, "")
-      .trim()
-      .toLowerCase();
+    const norm = label.replace(/[()]/g, "").trim().toLowerCase();
 
     const match =
       SCHEMES.find((s) => {
@@ -197,7 +194,6 @@ export default function ChatScreen() {
       console.error("Failed to load chats from storage:", err);
     }
 
-    // If nothing in storage for this key, create first chat
     const firstChat = createNewChat();
     setChats([firstChat]);
     setActiveChatId(firstChat.id);
@@ -207,10 +203,7 @@ export default function ChatScreen() {
   useEffect(() => {
     if (!chats.length) return;
     try {
-      localStorage.setItem(
-        storageKey,
-        JSON.stringify({ chats, activeChatId })
-      );
+      localStorage.setItem(storageKey, JSON.stringify({ chats, activeChatId }));
     } catch (err) {
       console.error("Failed to save chats:", err);
     }
@@ -221,29 +214,24 @@ export default function ChatScreen() {
   const messages = activeChat?.messages || [];
 
   // ---------- Helper functions ----------
-
-  // HTML -> plain text (copy + TTS ke liye)
   function stripHtml(html) {
     const tmp = document.createElement("div");
     tmp.innerHTML = html;
     return tmp.textContent || tmp.innerText || "";
   }
 
-  // Small helper to remove "Apply / Read More" line from bot HTML
   function stripApplyReadMore(html) {
     if (!html) return html;
     return html.replace(/Apply\s*\/\s*Read More[^<]*/gi, "");
   }
 
-  // 🔈 Text aloud padhne ke liye (Web Speech API)
   function handleSpeak(msgKey, msg) {
     try {
       if (typeof window === "undefined" || !window.speechSynthesis) {
-        alert("Aapka browser voice output support nahi karta.");
+        alert(isHi ? "आपका ब्राउज़र वॉइस सपोर्ट नहीं करता।" : "Your browser doesn't support TTS.");
         return;
       }
 
-      // Agar yehi message already bol raha hai → stop
       if (speakingKey === msgKey) {
         window.speechSynthesis.cancel();
         setSpeakingKey(null);
@@ -254,8 +242,6 @@ export default function ChatScreen() {
       if (!plainText.trim()) return;
 
       const utterance = new SpeechSynthesisUtterance(plainText);
-
-      // Devanagari ho to Hindi, warna UI language ke hisaab se
       const hasDevanagari = /[\u0900-\u097F]/.test(plainText);
       if (msg.lang === "en" && !hasDevanagari) {
         utterance.lang = "en-IN";
@@ -273,7 +259,6 @@ export default function ChatScreen() {
     }
   }
 
-  // 📋 Response clipboard pe copy
   async function handleCopy(msgKey, msg) {
     try {
       const plainText = stripHtml(msg.text || "");
@@ -282,7 +267,6 @@ export default function ChatScreen() {
       if (navigator.clipboard && navigator.clipboard.writeText) {
         await navigator.clipboard.writeText(plainText);
       } else {
-        // fallback
         const textarea = document.createElement("textarea");
         textarea.value = plainText;
         document.body.appendChild(textarea);
@@ -292,30 +276,24 @@ export default function ChatScreen() {
       }
 
       setCopiedKey(msgKey);
-      setTimeout(() => {
-        setCopiedKey((curr) => (curr === msgKey ? null : curr));
-      }, 1500);
+      setTimeout(() => setCopiedKey((curr) => (curr === msgKey ? null : curr)), 1500);
     } catch (err) {
       console.error("Copy failed:", err);
-      alert("Copy karne me dikkat aayi.");
+      alert(isHi ? "कॉपी विफल हुआ।" : "Copy failed.");
     }
   }
 
-  // 🎤 Start voice recognition using Web Speech API
   function startListening() {
     try {
-      const SpeechRecognition =
-        window.SpeechRecognition || window.webkitSpeechRecognition;
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
       if (!SpeechRecognition) {
-        alert(
-          "आपका ब्राउज़र वॉइस इनपुट सपोर्ट नहीं करता। कृपया Google Chrome का इस्तेमाल करें।"
-        );
+        alert(isHi ? "आपका ब्राउज़र वॉइस इनपुट सपोर्ट नहीं करता।" : "Your browser does not support voice input.");
         return;
       }
 
       const recognition = new SpeechRecognition();
-      recognition.lang = "hi-IN"; // Hindi; use "hi-IN,en-US" for Hinglish
+      recognition.lang = "hi-IN";
       recognition.interimResults = false;
 
       recognition.onstart = () => setListening(true);
@@ -324,17 +302,13 @@ export default function ChatScreen() {
       recognition.onresult = (event) => {
         const speechText = event.results?.[0]?.[0]?.transcript ?? "";
         if (!speechText) return;
-
-        // Mic se jo bola, use input box me daal do
-        setInput((prev) =>
-          prev ? `${prev.trimEnd()} ${speechText}` : speechText
-        );
+        setInput((prev) => (prev ? `${prev.trimEnd()} ${speechText}` : speechText));
       };
 
       recognition.onerror = (err) => {
         console.error("Speech recognition error:", err);
         setListening(false);
-        alert("Mic error: " + (err?.error ?? "unknown"));
+        alert((isHi ? "माइक त्रुटि: " : "Mic error: ") + (err?.error ?? "unknown"));
       };
 
       recognition.start();
@@ -351,26 +325,19 @@ export default function ChatScreen() {
     setInput("");
     setSpeakingKey(null);
     setCopiedKey(null);
-    if (typeof window !== "undefined" && window.speechSynthesis) {
-      window.speechSynthesis.cancel();
-    }
+    if (typeof window !== "undefined" && window.speechSynthesis) window.speechSynthesis.cancel();
   }
 
   function handleDeleteChat(chatId, e) {
     e.stopPropagation();
     setChats((prev) => {
       const filtered = prev.filter((c) => c.id !== chatId);
-
       if (filtered.length === 0) {
         const nc = createNewChat();
         setActiveChatId(nc.id);
         return [nc];
       }
-
-      if (chatId === activeChatId) {
-        setActiveChatId(filtered[0].id);
-      }
-
+      if (chatId === activeChatId) setActiveChatId(filtered[0].id);
       return filtered;
     });
   }
@@ -380,14 +347,12 @@ export default function ChatScreen() {
     if (!question || loading) return;
     if (!activeChatId || !activeChat) return;
 
-    // Backend ke liye last kuch history messages (sirf text)
     const prevMessages = messages || [];
     const historyForBackend = prevMessages.slice(-6).map((m) => ({
       role: m.from === "user" ? "user" : "assistant",
       content: stripHtml(m.text || ""),
     }));
 
-    // 🧍‍♀️ Build user_meta from logged-in user
     const userMeta = user
       ? {
           district: user.district || null,
@@ -403,7 +368,6 @@ export default function ChatScreen() {
         }
       : null;
 
-    // 1) User message UI me daal do
     const userMsg = { from: "user", type: "text", text: question };
     setChats((prev) =>
       prev.map((chat) =>
@@ -429,7 +393,6 @@ export default function ChatScreen() {
       const res = await fetch(API_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        // Backend /ask expects { question, ui_lang, mode, history, user_meta }
         body: JSON.stringify({
           question,
           ui_lang: uiLang,
@@ -439,9 +402,7 @@ export default function ChatScreen() {
         }),
       });
 
-      if (!res.ok)
-        throw new Error(`API error: ${res.status} ${res.statusText}`);
-
+      if (!res.ok) throw new Error(`API error: ${res.status} ${res.statusText}`);
       const data = await res.json();
 
       let botMsg;
@@ -466,9 +427,7 @@ export default function ChatScreen() {
 
       setChats((prev) =>
         prev.map((chat) =>
-          chat.id === activeChatId
-            ? { ...chat, messages: [...chat.messages, botMsg] }
-            : chat
+          chat.id === activeChatId ? { ...chat, messages: [...chat.messages, botMsg] } : chat
         )
       );
     } catch (e) {
@@ -476,14 +435,13 @@ export default function ChatScreen() {
       const errorMsg = {
         from: "bot",
         type: "text",
-        text:
-          "माफ़ कीजिए, सर्वर से कनेक्शन नहीं हो पाया। कृपया थोड़ी देर बाद पुनः प्रयास करें।",
+        text: isHi
+          ? "माफ़ कीजिए, सर्वर से कनेक्शन नहीं हो पाया। कृपया थोड़ी देर बाद पुनः प्रयास करें।"
+          : "Sorry, couldn't connect to the server. Please try again later.",
       };
       setChats((prev) =>
         prev.map((chat) =>
-          chat.id === activeChatId
-            ? { ...chat, messages: [...chat.messages, errorMsg] }
-            : chat
+          chat.id === activeChatId ? { ...chat, messages: [...chat.messages, errorMsg] } : chat
         )
       );
     } finally {
@@ -502,16 +460,13 @@ export default function ChatScreen() {
     setActiveChatId(chatId);
     setSpeakingKey(null);
     setCopiedKey(null);
-    if (typeof window !== "undefined" && window.speechSynthesis) {
-      window.speechSynthesis.cancel();
-    }
+    if (typeof window !== "undefined" && window.speechSynthesis) window.speechSynthesis.cancel();
   }
 
   if (!activeChat) return null;
 
   return (
     <>
-      {/* Full height; AppShell main already has h-screen & overflow-hidden */}
       <section className="h-full w-full flex gap-4 overflow-hidden">
         {/* Left: chat history sidebar */}
         <aside
@@ -527,15 +482,16 @@ export default function ChatScreen() {
                   type="button"
                   onClick={handleNewChat}
                   className="text-xs px-3 py-2 rounded-full bg-[#166534] text-white hover:bg-[#14532d]"
+                  title={isHi ? "नया चैट" : "New chat"}
                 >
-                  + New chat
+                  {isHi ? "+ नया चैट" : "+ New chat"}
                 </button>
-                {/* hide history icon */}
+
                 <button
                   type="button"
                   onClick={() => setShowSidebar(false)}
                   className="w-7 h-7 text-xs rounded-full border border-gray-300 flex items-center justify-center hover:bg-gray-50"
-                  title="Hide history"
+                  title={isHi ? "छुपाएँ" : "Hide"}
                 >
                   ✕
                 </button>
@@ -552,6 +508,7 @@ export default function ChatScreen() {
                         ? "bg-[#E6F4EA] border-[#166534] text-gray-900"
                         : "bg-white border-gray-200 text-gray-700 hover:bg-gray-50"
                     }`}
+                    title={isHi ? "खोलें" : "Open"}
                   >
                     <div className="flex-1 min-w-0">
                       <div className="truncate font-medium">{chat.title}</div>
@@ -563,7 +520,8 @@ export default function ChatScreen() {
                       type="button"
                       onClick={(e) => handleDeleteChat(chat.id, e)}
                       className="ml-1 text-[11px] text-red-500 hover:text-red-700"
-                      title="Delete chat"
+                      title={isHi ? "चैट हटाएँ" : "Delete chat"}
+                      aria-label={isHi ? "चैट हटाएँ" : "Delete chat"}
                     >
                       🗑
                     </button>
@@ -576,15 +534,15 @@ export default function ChatScreen() {
 
         {/* Middle + right column */}
         <div className="flex-1 flex gap-4 overflow-hidden">
-          {/* Middle: language toggle + chat UI */}
+          {/* Middle: language toggle + chat UI (chat area keeps internal toggle) */}
           <div className="flex-1 flex flex-col gap-3">
-            {/* Top row: sidebar icon + language toggle */}
+            {/* Top row: sidebar icon + chat's language toggle */}
             <div className="w-full flex items-center justify-between pr-4">
               <button
                 type="button"
                 onClick={() => setShowSidebar((s) => !s)}
                 className="w-8 h-8 rounded-full bg-white shadow flex items-center justify-center text-sm"
-                title={showSidebar ? "Hide history" : "Show history"}
+                title={showSidebar ? (isHi ? "इतिहास छुपाएँ" : "Hide history") : (isHi ? "इतिहास दिखाएँ" : "Show history")}
               >
                 ☰
               </button>
@@ -598,8 +556,9 @@ export default function ChatScreen() {
                       ? "bg-[#166534] text-white border-[#166534]"
                       : "bg-white text-gray-700 border-gray-300"
                   }`}
+                  title={isHi ? "यहाँ चैट भाषा बदलें (हिन्दी)" : "Change chat language (Hindi)"}
                 >
-                  हिन्दी / Hinglish
+                  {isHi ? "हिन्दी/ Hinglish" : "हिन्दी / Hinglish"}
                 </button>
                 <button
                   type="button"
@@ -609,8 +568,9 @@ export default function ChatScreen() {
                       ? "bg-[#166534] text-white border-[#166534]"
                       : "bg-white text-gray-700 border-gray-300"
                   }`}
+                  title={isHi ? "यहाँ चैट भाषा बदलें (अंग्रेज़ी)" : "Change chat language (English)"}
                 >
-                  English
+                  {isHi ? "English" : "English"}
                 </button>
               </div>
             </div>
@@ -621,7 +581,6 @@ export default function ChatScreen() {
                 {messages.map((msg, idx) => {
                   const msgKey = `${activeChatId}-${idx}`;
 
-                  // User bubble
                   if (msg.from === "user") {
                     return (
                       <div
@@ -633,19 +592,14 @@ export default function ChatScreen() {
                     );
                   }
 
-                  // Bot answer: plain text + optional cards + optional scheme pills
                   if (msg.type === "answer+cards") {
                     return (
-                      <div
-                        key={msgKey}
-                        className="self-start max-w-[85%] flex flex-col gap-2"
-                      >
+                      <div key={msgKey} className="self-start max-w-[85%] flex flex-col gap-2">
                         <div className="bg-[#E6F4EA] text-[10px] text-gray-800 rounded-2xl px-3 py-1 inline-block">
                           🤖 Panchayat Sahayika
                         </div>
 
                         <AnswerCard>
-                          {/* Header row: speaker + copy */}
                           <div className="flex items-center justify-between mb-1">
                             <span className="text-[10px] text-gray-500">
                               Panchayat Sahayika ka jawab
@@ -655,11 +609,7 @@ export default function ChatScreen() {
                                 type="button"
                                 onClick={() => handleSpeak(msgKey, msg)}
                                 className="text-xs px-2 py-1 rounded-full bg-[#E6F4EA] hover:bg-[#D1F1DE]"
-                                title={
-                                  speakingKey === msgKey
-                                    ? "Bolna band karein"
-                                    : "Jawab सुनें"
-                                }
+                                title={speakingKey === msgKey ? (isHi ? "बोलना बंद करें" : "Stop") : (isHi ? "उत्तर सुनें" : "Listen")}
                               >
                                 {speakingKey === msgKey ? "⏹" : "🔈"}
                               </button>
@@ -667,25 +617,16 @@ export default function ChatScreen() {
                                 type="button"
                                 onClick={() => handleCopy(msgKey, msg)}
                                 className="text-xs px-2 py-1 rounded-full bg-[#E6F4EA] hover:bg-[#D1F1DE]"
-                                title="Copy karein"
+                                title={isHi ? "कॉपि करें" : "Copy"}
                               >
                                 📋
                               </button>
-                              {copiedKey === msgKey && (
-                                <span className="text-[10px] text-gray-500">
-                                  Copied
-                                </span>
-                              )}
+                              {copiedKey === msgKey && <span className="text-[10px] text-gray-500">{isHi ? "कॉपी हुआ" : "Copied"}</span>}
                             </div>
                           </div>
 
-                          {/* actual answer HTML */}
-                          <div
-                            className="text-xs leading-relaxed whitespace-pre-line"
-                            dangerouslySetInnerHTML={{ __html: msg.text }}
-                          />
+                          <div className="text-xs leading-relaxed whitespace-pre-line" dangerouslySetInnerHTML={{ __html: msg.text }} />
 
-                          {/* scheme pills from sources (only those present in JSON) */}
                           {msg.sources?.length > 0 && (
                             <div className="mt-2 flex flex-wrap gap-1">
                               {msg.sources.map((s, i) => {
@@ -693,12 +634,7 @@ export default function ChatScreen() {
                                 const hasData = getSchemeByLabel(label);
                                 if (!hasData) return null;
                                 return (
-                                  <button
-                                    key={i}
-                                    type="button"
-                                    onClick={() => openSchemeByName(label)}
-                                    className="px-3 py-1 bg-[#ECFDF5] text-[10px] text-[#166534] rounded-full border border-[#BBF7D0] cursor-pointer hover:bg-[#D1F1DE]"
-                                  >
+                                  <button key={i} type="button" onClick={() => openSchemeByName(label)} className="px-3 py-1 bg-[#ECFDF5] text-[10px] text-[#166534] rounded-full border border-[#BBF7D0] cursor-pointer hover:bg-[#D1F1DE]">
                                     {label}
                                   </button>
                                 );
@@ -706,7 +642,6 @@ export default function ChatScreen() {
                             </div>
                           )}
 
-                          {/* minimal scheme cards from msg.cards (no Apply/Read, only those present in JSON) */}
                           {msg.cards?.length > 0 && (
                             <div className="mt-3 space-y-2">
                               {msg.cards.map((c, i) => {
@@ -714,20 +649,9 @@ export default function ChatScreen() {
                                 const hasData = getSchemeByLabel(label);
                                 if (!hasData) return null;
                                 return (
-                                  <button
-                                    key={i}
-                                    type="button"
-                                    onClick={() => openSchemeByName(label)}
-                                    className="w-full text-left border border-[#E5E7EB] rounded-2xl bg-[#F9FAFB] px-3 py-2 hover:bg-white hover:shadow-sm transition cursor-pointer"
-                                  >
-                                    <div className="text-xs font-semibold text-gray-900">
-                                      {c.title}
-                                    </div>
-                                    {c.subtitle && (
-                                      <div className="text-[11px] text-gray-600 mt-0.5">
-                                        {c.subtitle}
-                                      </div>
-                                    )}
+                                  <button key={i} type="button" onClick={() => openSchemeByName(label)} className="w-full text-left border border-[#E5E7EB] rounded-2xl bg-[#F9FAFB] px-3 py-2 hover:bg-white hover:shadow-sm transition cursor-pointer">
+                                    <div className="text-xs font-semibold text-gray-900">{c.title}</div>
+                                    {c.subtitle && <div className="text-[11px] text-gray-600 mt-0.5">{c.subtitle}</div>}
                                   </button>
                                 );
                               })}
@@ -738,54 +662,21 @@ export default function ChatScreen() {
                     );
                   }
 
-                  // Bot answer: text + sources (old shape)
                   if (msg.type === "answer") {
                     return (
-                      <div
-                        key={msgKey}
-                        className="self-start max-w-[80%] flex flex-col gap-2"
-                      >
-                        <div className="bg-[#E6F4EA] text-[10px] text-gray-800 rounded-2xl px-3 py-1 inline-block">
-                          🤖 Panchayat Sahayika
-                        </div>
+                      <div key={msgKey} className="self-start max-w-[80%] flex flex-col gap-2">
+                        <div className="bg-[#E6F4EA] text-[10px] text-gray-800 rounded-2xl px-3 py-1 inline-block">🤖 Panchayat Sahayika</div>
                         <AnswerCard>
                           <div className="flex items-center justify-between mb-1">
-                            <span className="text-[10px] text-gray-500">
-                              Panchayat Sahayika ka jawab
-                            </span>
+                            <span className="text-[10px] text-gray-500">Panchayat Sahayika ka jawab</span>
                             <div className="flex items-center gap-1">
-                              <button
-                                type="button"
-                                onClick={() => handleSpeak(msgKey, msg)}
-                                className="text-xs px-2 py-1 rounded-full bg-[#E6F4EA] hover:bg-[#D1F1DE]"
-                                title={
-                                  speakingKey === msgKey
-                                    ? "Bolna band karein"
-                                    : "Jawab सुनें"
-                                }
-                              >
-                                {speakingKey === msgKey ? "⏹" : "🔈"}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleCopy(msgKey, msg)}
-                                className="text-xs px-2 py-1 rounded-full bg-[#E6F4EA] hover:bg-[#D1F1DE]"
-                                title="Copy karein"
-                              >
-                                📋
-                              </button>
-                              {copiedKey === msgKey && (
-                                <span className="text-[10px] text-gray-500">
-                                  Copied
-                                </span>
-                              )}
+                              <button type="button" onClick={() => handleSpeak(msgKey, msg)} className="text-xs px-2 py-1 rounded-full bg-[#E6F4EA] hover:bg-[#D1F1DE]" title={speakingKey === msgKey ? (isHi ? "बोलना बंद करें" : "Stop") : (isHi ? "उत्तर सुनें" : "Listen")}>{speakingKey === msgKey ? "⏹" : "🔈"}</button>
+                              <button type="button" onClick={() => handleCopy(msgKey, msg)} className="text-xs px-2 py-1 rounded-full bg-[#E6F4EA] hover:bg-[#D1F1DE]" title={isHi ? "कॉपि करें" : "Copy"}>📋</button>
+                              {copiedKey === msgKey && <span className="text-[10px] text-gray-500">{isHi ? "कॉपी हुआ" : "Copied"}</span>}
                             </div>
                           </div>
 
-                          <div
-                            className="text-xs leading-relaxed whitespace-pre-line"
-                            dangerouslySetInnerHTML={{ __html: msg.text }}
-                          />
+                          <div className="text-xs leading-relaxed whitespace-pre-line" dangerouslySetInnerHTML={{ __html: msg.text }} />
 
                           {msg.sources?.length > 0 && (
                             <div className="mt-2 flex flex-wrap gap-1">
@@ -794,12 +685,7 @@ export default function ChatScreen() {
                                 const hasData = getSchemeByLabel(label);
                                 if (!hasData) return null;
                                 return (
-                                  <button
-                                    key={i}
-                                    type="button"
-                                    onClick={() => openSchemeByName(label)}
-                                    className="px-3 py-1 bg-[#ECFDF5] text-[10px] text-[#166534] rounded-full border border-[#BBF7D0] cursor-pointer hover:bg-[#D1F1DE]"
-                                  >
+                                  <button key={i} type="button" onClick={() => openSchemeByName(label)} className="px-3 py-1 bg-[#ECFDF5] text-[10px] text-[#166534] rounded-full border border-[#BBF7D0] cursor-pointer hover:bg-[#D1F1DE]">
                                     {label}
                                   </button>
                                 );
@@ -811,131 +697,65 @@ export default function ChatScreen() {
                     );
                   }
 
-                  // Simple bot bubble (initial greeting)
                   return (
-                    <div
-                      key={msgKey}
-                      className="self-start bg-[#E6F4EA] text-xs text-gray-800 rounded-2xl px-3 py-2 max-w-[70%]"
-                    >
-                      <div className="font-semibold mb-1">
-                        🤖 Panchayat Sahayika
-                      </div>
+                    <div key={msgKey} className="self-start bg-[#E6F4EA] text-xs text-gray-800 rounded-2xl px-3 py-2 max-w-[70%]">
+                      <div className="font-semibold mb-1">🤖 Panchayat Sahayika</div>
                       <div>{msg.text}</div>
                     </div>
                   );
                 })}
 
-                {loading && (
-                  <div className="self-start bg-[#E6F4EA] text-[10px] text-gray-600 rounded-2xl px-3 py-1 max-w-[40%]">
-                    सोच रही हूँ...
-                  </div>
-                )}
+                {loading && <div className="self-start bg-[#E6F4EA] text-[10px] text-gray-600 rounded-2xl px-3 py-1 max-w-[40%]">{isHi ? "सोच रही हूँ..." : "Thinking..."}</div>}
               </div>
             </div>
 
-            {/* Input bar – stays at bottom of this column */}
+            {/* Input bar */}
             <div className="w-full max-w-3xl bg-white border-t border-gray-200 px-3 py-3 rounded-t-3xl flex items-center gap-3">
-              {/* 🎤 Mic button with listening state */}
-              <button
-                className="w-10 h-10 rounded-full bg-[#166534] text-white flex items-center justify-center text-sm"
-                type="button"
-                onClick={startListening}
-                title="Voice input"
-              >
+              <button className="w-10 h-10 rounded-full bg-[#166534] text-white flex items-center justify-center text-sm" type="button" onClick={startListening} title={isHi ? "वॉइस इनपुट" : "Voice input"}>
                 {listening ? "🔴" : "🎙️"}
               </button>
 
               <input
                 className="flex-1 px-4 py-2 rounded-full border border-gray-300 text-xs outline-none"
-                placeholder="Type your question... / अपना सवाल यहाँ लिखें..."
+                placeholder={isHi ? "अपना सवाल यहाँ लिखें..." : "Type your question... / अपना सवाल यहाँ लिखें..."}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
               />
 
-              <button
-                className="w-10 h-10 rounded-full bg-[#166534] text-white flex items-center justify-center text-sm disabled:opacity-60"
-                type="button"
-                onClick={sendMessage}
-                disabled={loading || !input.trim()}
-                title="Send"
-              >
+              <button className="w-10 h-10 rounded-full bg-[#166534] text-white flex items-center justify-center text-sm disabled:opacity-60" type="button" onClick={sendMessage} disabled={loading || !input.trim()} title={isHi ? "भेजें" : "Send"}>
                 ➤
               </button>
             </div>
 
-            {/* optional “listening…” text below bar */}
-            {listening && (
-              <div className="text-[11px] text-green-700 pl-14 pb-2">
-                🎙️ मैं आपकी बात सुन रही हूँ... साफ़-साफ़ बोलिए।
-              </div>
-            )}
+            {listening && <div className="text-[11px] text-green-700 pl-14 pb-2">🎙️ {isHi ? "मैं आपकी बात सुन रही हूँ... साफ़-साफ़ बोलिए।" : "I'm listening... speak clearly."}</div>}
           </div>
 
-          {/* Right side: 3 cards (Schemes + Trainings + Planning Tool) */}
+          {/* Right side: 3 bilingual cards but now fully Hindi when isHi */}
           <div className="w-80 flex flex-col gap-4 pr-4 pt-10">
-            {/* Card 1: Find Schemes & Services */}
-            <button
-              type="button"
-              onClick={() => navigate("/finder")}
-              className="bg-white rounded-3xl shadow-md border border-[#F4E3C3] px-4 py-4 text-left hover:shadow-lg transition cursor-pointer"
-            >
-              <div className="text-xs font-semibold text-[#166534] mb-1">
-                योजनाएँ / सेवाएँ / प्रोग्राम
-              </div>
-              <div className="text-sm font-semibold mb-1">
-                Find Schemes &amp; Services
-              </div>
-              <p className="text-[11px] text-gray-600 leading-relaxed">
-                अपने गाँव, जाति, सेवा या अन्य विवरण के आधार पर आपके लिए उपलब्ध
-                सरकारी योजनाएँ देखें।
-              </p>
+            <button type="button" onClick={() => navigate("/finder")} className="bg-white rounded-3xl shadow-md border border-[#F4E3C3] px-4 py-4 text-left hover:shadow-lg transition cursor-pointer" title={isHi ? "योजनाएँ / सेवाएँ" : "Find Schemes & Services"}>
+              <div className="text-xs font-semibold text-[#166534] mb-1">{isHi ? "योजनाएँ / सेवाएँ / प्रोग्राम" : "योजनाएँ / सेवाएँ / प्रोग्राम"}</div>
+              <div className="text-sm font-semibold mb-1">{isHi ? "सरकारी योजनाएं खोजें" : "Find Schemes & Services"}</div>
+              <p className="text-[11px] text-gray-600 leading-relaxed">{isHi ? "अपने गाँव, जाति, सेवा या अन्य विवरण के आधार पर आपके लिए उपलब्ध सरकारी योजनाएँ देखें।" : "Check government schemes available for your village, caste, service or other details."}</p>
             </button>
 
-            {/* Card 2: Panchayat Trainings Finder */}
-            <button
-              type="button"
-              onClick={() => navigate("/my-panchayat/trainings")}
-              className="bg-white rounded-3xl shadow-md border border-[#F4E3C3] px-4 py-4 text-left hover:shadow-lg transition cursor-pointer"
-            >
-              <div className="text-xs font-semibold text-[#166534] mb-1">
-                प्रशिक्षण / क्षमता विकास
-              </div>
-              <div className="text-sm font-semibold mb-1">
-                Panchayat Trainings Finder
-              </div>
-              <p className="text-[11px] text-gray-600 leading-relaxed">
-                District और Block के हिसाब से सभी पंचायत trainings एक ही जगह पर
-                देखें।
-              </p>
+            <button type="button" onClick={() => navigate("/my-panchayat/trainings")} className="bg-white rounded-3xl shadow-md border border-[#F4E3C3] px-4 py-4 text-left hover:shadow-lg transition cursor-pointer" title={isHi ? "प्रशिक्षण / क्षमता विकास" : "Panchayat Trainings Finder"}>
+              <div className="text-xs font-semibold text-[#166534] mb-1">{isHi ? "प्रशिक्षण / क्षमता विकास" : "प्रशिक्षण / क्षमता विकास"}</div>
+              <div className="text-sm font-semibold mb-1">{isHi ? "पंचायत प्रशिक्षण खोजक" : "Panchayat Trainings Finder"}</div>
+              <p className="text-[11px] text-gray-600 leading-relaxed">{isHi ? "जिला और ब्लॉक के हिसाब से सभी पंचायत प्रशिक्षण एक ही जगह पर देखें।" : "View all Panchayat trainings by District and Block in one place."}</p>
             </button>
 
-            {/* Card 3: Smart Gram Planning Tool */}
-            <button
-              type="button"
-              onClick={() => navigate("/my-panchayat/planning")}
-              className="bg-white rounded-3xl shadow-md border border-[#F4E3C3] px-4 py-4 text-left hover:shadow-lg transition cursor-pointer"
-            >
-              <div className="text-xs font-semibold text-[#166534] mb-1">
-                Smart Gram Planning
-              </div>
-              <div className="text-sm font-semibold mb-1">
-                Smart Gram Planning Tool
-              </div>
-              <p className="text-[11px] text-gray-600 leading-relaxed">
-                Village infra deficit index के आधार पर development priorities और
-                सुझाए गए projects देखें।
-              </p>
+            <button type="button" onClick={() => navigate("/my-panchayat/planning")} className="bg-white rounded-3xl shadow-md border border-[#F4E3C3] px-4 py-4 text-left hover:shadow-lg transition cursor-pointer" title={isHi ? "स्मार्ट ग्राम प्लानिंग" : "Smart Gram Planning"}>
+              <div className="text-xs font-semibold text-[#166534] mb-1">{isHi ? "स्मार्ट ग्राम प्लानिंग" : "स्मार्ट ग्राम प्लानिंग"}</div>
+              <div className="text-sm font-semibold mb-1">{isHi ? "स्मार्ट ग्राम योजना उपकरण" : "Smart Gram Planning Tool"}</div>
+              <p className="text-[11px] text-gray-600 leading-relaxed">{isHi ? "ग्राम इन्फ्रा डेफिसिट इंडेक्स के आधार पर विकास प्राथमिकताएँ और सुझाए गए परियोजनाएं देखें।" : "See development priorities and suggested projects based on village infra deficit index."}</p>
             </button>
           </div>
         </div>
       </section>
 
       {/* Scheme popup */}
-      <SchemeDetailsModal
-        scheme={selectedScheme}
-        onClose={() => setSelectedScheme(null)}
-      />
+      <SchemeDetailsModal scheme={selectedScheme} onClose={() => setSelectedScheme(null)} />
     </>
   );
 }

@@ -1,9 +1,13 @@
 // src/screens/TrainingFinderScreen.jsx
 import React, { useEffect, useMemo, useState } from "react";
+import { useLanguage } from "../context/LanguageContext.jsx";
 
 const API_BASE = "http://127.0.0.1:7000"; // trainings FastAPI URL
 
 export default function TrainingFinderScreen() {
+  const { lang } = useLanguage();
+  const isHi = lang === "hi";
+
   const [districts, setDistricts] = useState([]);
   const [blocksByDistrict, setBlocksByDistrict] = useState({});
   const [selectedDistrict, setSelectedDistrict] = useState("");
@@ -14,15 +18,14 @@ export default function TrainingFinderScreen() {
   const [loadingTrainings, setLoadingTrainings] = useState(false);
   const [error, setError] = useState("");
 
+  // ---- Load filters (districts + blocks) ----
   useEffect(() => {
     const loadFilters = async () => {
       try {
         setLoadingFilters(true);
-      setError("");
+        setError("");
         const res = await fetch(`${API_BASE}/filters`);
         const data = await res.json();
-
-        console.log("Filters response:", data);
 
         const dists = data.districts || [];
         setDistricts(dists);
@@ -33,14 +36,18 @@ export default function TrainingFinderScreen() {
         }
       } catch (err) {
         console.error(err);
-        setError("Filters load nahi ho paaye. Backend check karo.");
+        setError(
+          isHi
+            ? "फ़िल्टर लोड नहीं हो पाए। कृपया trainings backend जाँचे।"
+            : "Could not load filters. Please check the trainings backend."
+        );
       } finally {
         setLoadingFilters(false);
       }
     };
 
     loadFilters();
-  }, []);
+  }, [isHi]);
 
   const currentBlocks = useMemo(() => {
     if (!selectedDistrict) return [];
@@ -51,6 +58,7 @@ export default function TrainingFinderScreen() {
     setSelectedBlock("");
   }, [selectedDistrict]);
 
+  // ---- Search trainings ----
   const handleSearch = async () => {
     try {
       setLoadingTrainings(true);
@@ -65,7 +73,11 @@ export default function TrainingFinderScreen() {
       setTrainings(data.items || []);
     } catch (err) {
       console.error(err);
-      setError("Trainings load nahi ho paaye. Backend check karo.");
+      setError(
+        isHi
+          ? "ट्रेनिंग सूची लोड नहीं हो पाई। कृपया backend जाँचे।"
+          : "Could not load trainings. Please check the backend."
+      );
     } finally {
       setLoadingTrainings(false);
     }
@@ -76,10 +88,14 @@ export default function TrainingFinderScreen() {
       {/* Selection area */}
       <div className="bg-white rounded-2xl shadow-sm p-4 space-y-3">
         <h2 className="text-sm font-semibold text-[#166534]">
-          Uttarakhand Panchayat Trainings Finder
+          {isHi
+            ? "उत्तराखंड पंचायत प्रशिक्षण खोजक"
+            : "Uttarakhand Panchayat Trainings Finder"}
         </h2>
         <p className="text-[10px] text-gray-500">
-          Pehle District aur Block select karo, phir trainings dekh sakte ho.
+          {isHi
+            ? "पहले जिला और ब्लॉक चुनिए, फिर ट्रेनिंग की सूची देख सकते हैं।"
+            : "First select District and Block, then you can view the list of trainings."}
         </p>
 
         <div className="flex flex-wrap gap-2 text-xs">
@@ -87,7 +103,7 @@ export default function TrainingFinderScreen() {
           <div className="flex items-center gap-1 bg-gray-50 border border-gray-200 rounded-full px-3 py-1">
             <span className="text-sm">📍</span>
             <span className="text-[11px] font-medium text-gray-700">
-              State: Uttarakhand
+              {isHi ? "राज्य: उत्तराखंड" : "State: Uttarakhand"}
             </span>
           </div>
 
@@ -100,7 +116,13 @@ export default function TrainingFinderScreen() {
               onChange={(e) => setSelectedDistrict(e.target.value)}
             >
               <option value="">
-                {loadingFilters ? "Loading..." : "Select District"}
+                {loadingFilters
+                  ? isHi
+                    ? "लोड हो रहा है..."
+                    : "Loading..."
+                  : isHi
+                  ? "जिला चुनें"
+                  : "Select District"}
               </option>
               {districts.map((dist) => (
                 <option key={dist} value={dist}>
@@ -121,9 +143,15 @@ export default function TrainingFinderScreen() {
             >
               <option value="">
                 {!selectedDistrict
-                  ? "Select district first"
+                  ? isHi
+                    ? "पहले जिला चुनें"
+                    : "Select district first"
                   : currentBlocks.length === 0
-                  ? "No blocks found"
+                  ? isHi
+                    ? "कोई ब्लॉक नहीं मिला"
+                    : "No blocks found"
+                  : isHi
+                  ? "ब्लॉक चुनें"
                   : "Select Block"}
               </option>
               {currentBlocks.map((blk) => (
@@ -140,7 +168,13 @@ export default function TrainingFinderScreen() {
           disabled={loadingTrainings || !selectedDistrict}
           className="mt-2 inline-flex items-center px-3 py-1.5 rounded-full text-[11px] font-semibold bg-[#166534] text-white hover:bg-green-800 disabled:opacity-60"
         >
-          {loadingTrainings ? "Loading trainings..." : "Show Trainings"}
+          {loadingTrainings
+            ? isHi
+              ? "ट्रेनिंग लोड हो रही हैं..."
+              : "Loading trainings..."
+            : isHi
+            ? "ट्रेनिंग दिखाएं"
+            : "Show Trainings"}
         </button>
 
         {error && (
@@ -154,9 +188,23 @@ export default function TrainingFinderScreen() {
       <div className="space-y-2">
         {trainings.length === 0 && !loadingTrainings && (
           <div className="bg-white rounded-2xl shadow-sm p-3 text-[11px] text-gray-500">
-            Abhi koi training list nahi hai. District/Block select karke{" "}
-            <span className="font-semibold text-[#166534]">Show Trainings</span>{" "}
-            dabao.
+            {isHi ? (
+              <>
+                अभी कोई ट्रेनिंग सूची नहीं दिख रही है। जिला/ब्लॉक चुनकर{" "}
+                <span className="font-semibold text-[#166534]">
+                  ट्रेनिंग दिखाएं
+                </span>{" "}
+                बटन दबाएँ।
+              </>
+            ) : (
+              <>
+                No trainings are listed yet. Select District/Block and press{" "}
+                <span className="font-semibold text-[#166534]">
+                  Show Trainings
+                </span>
+                .
+              </>
+            )}
           </div>
         )}
 
@@ -168,7 +216,7 @@ export default function TrainingFinderScreen() {
             <div className="flex items-start justify-between gap-2">
               <div>
                 <div className="font-semibold text-gray-800">
-                  {t.training_name || "Training"}
+                  {t.training_name || (isHi ? "प्रशिक्षण" : "Training")}
                 </div>
                 <div className="text-[10px] text-gray-500">
                   {t.org_institute}
@@ -181,12 +229,15 @@ export default function TrainingFinderScreen() {
             </div>
 
             <div className="text-[10px] text-gray-600 mt-1">
-              🗓️ {t.start_date} – {t.end_date}
+              {/* date row */}
+              {isHi ? "🗓️ " : "🗓️ "}
+              {t.start_date} – {t.end_date}
             </div>
 
             {t.training_category && (
               <div className="text-[9px] text-gray-500">
-                Category: {t.training_category}
+                {isHi ? "श्रेणी: " : "Category: "}
+                {t.training_category}
                 {t.training_sub_category
                   ? ` • ${t.training_sub_category}`
                   : ""}
@@ -195,7 +246,8 @@ export default function TrainingFinderScreen() {
 
             {t.targeted_participants && (
               <div className="text-[9px] text-gray-500">
-                👥 Target: {t.targeted_participants}
+                {isHi ? "👥 लक्ष्य: " : "👥 Target: "}
+                {t.targeted_participants}
               </div>
             )}
 
@@ -206,7 +258,8 @@ export default function TrainingFinderScreen() {
             )}
 
             <p className="text-[8px] text-gray-400 mt-1">
-              Source file: {t.source}
+              {isHi ? "स्रोत फ़ाइल: " : "Source file: "}
+              {t.source}
             </p>
           </div>
         ))}

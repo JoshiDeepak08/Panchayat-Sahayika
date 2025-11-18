@@ -2,9 +2,13 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/useAuth.jsx";
+import { useLanguage } from "../context/LanguageContext.jsx";
 
 export default function EditProfileScreen() {
   const { user, updateProfile } = useAuth();
+  const { lang } = useLanguage();
+  const isHi = lang === "hi";
+
   const navigate = useNavigate();
 
   const [form, setForm] = useState({
@@ -46,7 +50,9 @@ export default function EditProfileScreen() {
   if (!user) {
     return (
       <section className="mt-8 text-sm text-center">
-        Please login to edit your profile.
+        {isHi
+          ? "कृपया अपनी प्रोफ़ाइल संपादित करने के लिए लॉगिन करें।"
+          : "Please login to edit your profile."}
       </section>
     );
   }
@@ -70,12 +76,18 @@ export default function EditProfileScreen() {
       };
 
       await updateProfile(payload);
-      setSuccessMsg("Profile updated successfully.");
+      setSuccessMsg(
+        isHi
+          ? "प्रोफ़ाइल सफलतापूर्वक अपडेट हो गई।"
+          : "Profile updated successfully."
+      );
 
       setTimeout(() => navigate("/dashboard"), 700);
     } catch (err) {
       console.error(err);
-      setError(err.message || "Update failed");
+      setError(
+        isHi ? "अपडेट करते समय त्रुटि हुई।" : err.message || "Update failed"
+      );
     } finally {
       setSaving(false);
     }
@@ -85,10 +97,12 @@ export default function EditProfileScreen() {
     <section className="flex justify-center mt-8 px-4">
       <div className="w-full max-w-lg bg-white rounded-3xl shadow-soft border border-cardBorder px-6 py-6 space-y-4 text-left">
         <h1 className="text-xl font-semibold text-textMain">
-          Edit your profile
+          {isHi ? "अपनी प्रोफ़ाइल संपादित करें" : "Edit your profile"}
         </h1>
         <p className="text-[12px] text-gray-600">
-          Update your details so recommendations stay relevant.
+          {isHi
+            ? "अपनी जानकारी अपडेट करें ताकि सिफ़ारिशें आपके लिए प्रासंगिक रहें।"
+            : "Update your details so recommendations stay relevant."}
         </p>
 
         <form
@@ -100,7 +114,7 @@ export default function EditProfileScreen() {
             {/* Full name */}
             <div className="space-y-1">
               <label className="block text-[11px] font-medium text-gray-700">
-                Full Name
+                {isHi ? "पूरा नाम" : "Full Name"}
               </label>
               <input
                 name="full_name"
@@ -113,7 +127,7 @@ export default function EditProfileScreen() {
             {/* Age */}
             <div className="space-y-1">
               <label className="block text-[11px] font-medium text-gray-700">
-                Age
+                {isHi ? "उम्र" : "Age"}
               </label>
               <input
                 type="number"
@@ -127,7 +141,7 @@ export default function EditProfileScreen() {
             {/* Gender */}
             <div className="space-y-1">
               <label className="block text-[11px] font-medium text-gray-700">
-                Gender
+                {isHi ? "लिंग (Gender)" : "Gender"}
               </label>
               <select
                 name="gender"
@@ -135,10 +149,18 @@ export default function EditProfileScreen() {
                 onChange={handleChange}
                 className="w-full px-3 py-2 rounded-xl border border-gray-300 text-sm outline-none focus:border-emerald-500"
               >
-                <option value="">Select</option>
-                <option value="Female">Female</option>
-                <option value="Male">Male</option>
-                <option value="Other">Other</option>
+                <option value="">
+                  {isHi ? "चुनें" : "Select"}
+                </option>
+                <option value="Female">
+                  {isHi ? "महिला (Female)" : "Female"}
+                </option>
+                <option value="Male">
+                  {isHi ? "पुरुष (Male)" : "Male"}
+                </option>
+                <option value="Other">
+                  {isHi ? "अन्य (Other)" : "Other"}
+                </option>
               </select>
             </div>
           </div>
@@ -148,7 +170,7 @@ export default function EditProfileScreen() {
             {/* District */}
             <div className="space-y-1">
               <label className="block text-[11px] font-medium text-gray-700">
-                District
+                {isHi ? "ज़िला (District)" : "District"}
               </label>
               <input
                 name="district"
@@ -161,7 +183,7 @@ export default function EditProfileScreen() {
             {/* Block */}
             <div className="space-y-1">
               <label className="block text-[11px] font-medium text-gray-700">
-                Block
+                {isHi ? "ब्लॉक (Block)" : "Block"}
               </label>
               <input
                 name="block"
@@ -174,7 +196,7 @@ export default function EditProfileScreen() {
             {/* Village Code */}
             <div className="space-y-1">
               <label className="block text-[11px] font-medium text-gray-700">
-                Village Code
+                {isHi ? "गाँव कोड (Village Code)" : "Village Code"}
               </label>
               <input
                 name="village_code"
@@ -190,7 +212,7 @@ export default function EditProfileScreen() {
             {/* Disability */}
             <div className="space-y-1">
               <label className="block text-[11px] font-medium text-gray-700">
-                Disability
+                {isHi ? "विकलांगता (यदि हो)" : "Disability"}
               </label>
               <select
                 name="disability"
@@ -198,19 +220,32 @@ export default function EditProfileScreen() {
                 onChange={handleChange}
                 className="w-full px-3 py-2 rounded-xl border border-gray-300 text-sm outline-none focus:border-emerald-500"
               >
-                <option value="">None</option>
-                <option value="locomotor">Locomotor disability</option>
-                <option value="visual">Visual impairment</option>
-                <option value="hearing">Hearing impairment</option>
-                <option value="intellectual">Intellectual disability</option>
-                <option value="multiple">Multiple disabilities</option>
+                <option value="">
+                  {isHi ? "नहीं / बताना नहीं चाहते"
+                    : "None / Prefer not to say"}
+                </option>
+                <option value="locomotor">
+                  {isHi ? "चलने-फिरने में समस्या (Locomotor)" : "Locomotor disability"}
+                </option>
+                <option value="visual">
+                  {isHi ? "दृष्टि बाधित (Visual)" : "Visual impairment"}
+                </option>
+                <option value="hearing">
+                  {isHi ? "श्रवण बाधित (Hearing)" : "Hearing impairment"}
+                </option>
+                <option value="intellectual">
+                  {isHi ? "बौद्धिक विकलांगता" : "Intellectual disability"}
+                </option>
+                <option value="multiple">
+                  {isHi ? "एक से अधिक (Multiple)" : "Multiple disabilities"}
+                </option>
               </select>
             </div>
 
             {/* Occupation */}
             <div className="space-y-1">
               <label className="block text-[11px] font-medium text-gray-700">
-                Occupation
+                {isHi ? "पेशा (Occupation)" : "Occupation"}
               </label>
               <select
                 name="occupation"
@@ -218,21 +253,40 @@ export default function EditProfileScreen() {
                 onChange={handleChange}
                 className="w-full px-3 py-2 rounded-xl border border-gray-300 text-sm outline-none focus:border-emerald-500"
               >
-                <option value="">Select</option>
-                <option value="farmer">Farmer</option>
-                <option value="student">Student</option>
-                <option value="anganwadi">Anganwadi worker</option>
-                <option value="asha">ASHA worker</option>
-                <option value="shg_member">SHG member</option>
-                <option value="labour">Daily wage labour</option>
-                <option value="homemaker">Homemaker</option>
+                <option value="">
+                  {isHi ? "चुनें" : "Select"}
+                </option>
+                <option value="farmer">
+                  {isHi ? "किसान (Farmer)" : "Farmer"}
+                </option>
+                <option value="student">
+                  {isHi ? "छात्र / छात्रा (Student)" : "Student"}
+                </option>
+                <option value="anganwadi">
+                  {isHi ? "आंगनवाड़ी कार्यकर्ता" : "Anganwadi worker"}
+                </option>
+                <option value="asha">
+                  {isHi ? "आशा / स्वास्थ्य कार्यकर्ता" : "ASHA worker"}
+                </option>
+                <option value="shg_member">
+                  {isHi ? "एसएचजी सदस्य" : "SHG member"}
+                </option>
+                <option value="labour">
+                  {isHi ? "दैनिक मज़दूर (Daily wage labour)" : "Daily wage labour"}
+                </option>
+                <option value="homemaker">
+                  {isHi ? "गृहणी (Homemaker)" : "Homemaker"}
+                </option>
+                <option value="other">
+                  {isHi ? "अन्य (Other)" : "Other"}
+                </option>
               </select>
             </div>
 
             {/* Income */}
             <div className="space-y-1">
               <label className="block text-[11px] font-medium text-gray-700">
-                Income Bracket
+                {isHi ? "आय वर्ग (Income Bracket)" : "Income Bracket"}
               </label>
               <select
                 name="income_bracket"
@@ -240,18 +294,28 @@ export default function EditProfileScreen() {
                 onChange={handleChange}
                 className="w-full px-3 py-2 rounded-xl border border-gray-300 text-sm outline-none focus:border-emerald-500"
               >
-                <option value="">Select</option>
-                <option value="BPL">BPL / Antyodaya</option>
-                <option value="APL">APL</option>
-                <option value="lower_middle">Lower middle</option>
-                <option value="middle">Middle</option>
+                <option value="">
+                  {isHi ? "चुनें" : "Select"}
+                </option>
+                <option value="BPL">
+                  {isHi ? "बीपीएल / अंत्योदय (BPL)" : "BPL / Antyodaya"}
+                </option>
+                <option value="APL">
+                  {isHi ? "एपीएल (APL)" : "APL"}
+                </option>
+                <option value="lower_middle">
+                  {isHi ? "निम्न मध्यम वर्ग" : "Lower middle"}
+                </option>
+                <option value="middle">
+                  {isHi ? "मध्यम वर्ग" : "Middle"}
+                </option>
               </select>
             </div>
 
             {/* Social Category */}
             <div className="space-y-1">
               <label className="block text-[11px] font-medium text-gray-700">
-                Social Category
+                {isHi ? "सामाजिक वर्ग (Social Category)" : "Social Category"}
               </label>
               <select
                 name="social_category"
@@ -259,11 +323,19 @@ export default function EditProfileScreen() {
                 onChange={handleChange}
                 className="w-full px-3 py-2 rounded-xl border border-gray-300 text-sm outline-none focus:border-emerald-500"
               >
-                <option value="">Select</option>
-                <option value="SC">SC</option>
-                <option value="ST">ST</option>
-                <option value="OBC">OBC</option>
-                <option value="General">General</option>
+                <option value="">{isHi ? "चुनें" : "Select"}</option>
+                <option value="SC">
+                  {isHi ? "अनुसूचित जाति (SC)" : "SC"}
+                </option>
+                <option value="ST">
+                  {isHi ? "अनुसूचित जनजाति (ST)" : "ST"}
+                </option>
+                <option value="OBC">
+                  {isHi ? "ओबीसी (OBC)" : "OBC"}
+                </option>
+                <option value="General">
+                  {isHi ? "सामान्य (General)" : "General"}
+                </option>
               </select>
             </div>
           </div>
@@ -271,13 +343,17 @@ export default function EditProfileScreen() {
           {/* Interest Tag */}
           <div className="sm:col-span-2 space-y-1">
             <label className="block text-[11px] font-medium text-gray-700">
-              Interest tag
+              {isHi ? "रुचि टैग (Interest Tag)" : "Interest tag"}
             </label>
             <input
               name="interest_tag"
               value={form.interest_tag}
               onChange={handleChange}
-              placeholder="farmer, student, SHG member..."
+              placeholder={
+                isHi
+                  ? "किसान, छात्र, एसएचजी सदस्य..."
+                  : "farmer, student, SHG member..."
+              }
               className="w-full px-3 py-2 rounded-xl border border-gray-300 text-sm outline-none focus:border-emerald-500"
             />
           </div>
@@ -295,7 +371,7 @@ export default function EditProfileScreen() {
                 onClick={() => navigate(-1)}
                 className="px-4 py-2 rounded-xl border border-gray-300 text-sm"
               >
-                Cancel
+                {isHi ? "रद्द करें" : "Cancel"}
               </button>
 
               <button
@@ -303,7 +379,13 @@ export default function EditProfileScreen() {
                 disabled={saving}
                 className="px-4 py-2 rounded-xl bg-[#166534] text-white text-sm font-semibold disabled:opacity-60"
               >
-                {saving ? "Saving..." : "Save changes"}
+                {saving
+                  ? isHi
+                    ? "सेव हो रहा है..."
+                    : "Saving..."
+                  : isHi
+                  ? "बदलाव सेव करें"
+                  : "Save changes"}
               </button>
             </div>
           </div>
