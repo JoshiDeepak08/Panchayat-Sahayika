@@ -1,89 +1,14 @@
-// import { useState } from "react";
-// import { useNavigate } from "react-router-dom";
-
-// const API_BASE = "http://127.0.0.1:8000";
-
-// export default function RegisterScreen() {
-//   const [form, setForm] = useState({
-//     username: "",
-//     password: "",
-//     full_name: "",
-//     district: "",
-//     block: "",
-//     village_code: "",
-//   });
-//   const [error, setError] = useState("");
-//   const navigate = useNavigate();
-
-//   function update(field, value) {
-//     setForm((f) => ({ ...f, [field]: value }));
-//   }
-
-//   async function handleSubmit(e) {
-//     e.preventDefault();
-//     setError("");
-//     try {
-//       const res = await fetch(`${API_BASE}/auth/register`, {
-//         method: "POST",
-//         headers: { "Content-Type": "application/json" },
-//         body: JSON.stringify(form),
-//       });
-//       if (!res.ok) throw new Error("Failed");
-//       await res.json();
-//       navigate("/login");
-//     } catch (err) {
-//       console.error(err);
-//       setError(
-//         "Register karne me dikkat aayi (username duplicate ho sakta hai)."
-//       );
-//     }
-//   }
-
-//   return (
-//     <section className="flex justify-center mt-8">
-//       <form
-//         onSubmit={handleSubmit}
-//         className="bg-white rounded-2xl shadow-md p-6 w-full max-w-sm space-y-3 text-sm"
-//       >
-//         <h2 className="text-lg font-semibold">Register</h2>
-//         {["username", "full_name", "district", "block", "village_code"].map(
-//           (f) => (
-//             <input
-//               key={f}
-//               className="w-full border rounded-md px-3 py-2 text-sm"
-//               placeholder={f.replace("_", " ")}
-//               value={form[f]}
-//               onChange={(e) => update(f, e.target.value)}
-//             />
-//           )
-//         )}
-//         <input
-//           className="w-full border rounded-md px-3 py-2 text-sm"
-//           placeholder="Password"
-//           type="password"
-//           value={form.password}
-//           onChange={(e) => update("password", e.target.value)}
-//         />
-//         {error && <p className="text-xs text-red-600">{error}</p>}
-//         <button
-//           type="submit"
-//           className="w-full bg-[#166534] text-white rounded-md py-2 text-sm"
-//         >
-//           Create account
-//         </button>
-//       </form>
-//     </section>
-//   );
-// }
-
-
 // src/screens/RegisterScreen.jsx
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/useAuth.jsx";
+import { useLanguage } from "../context/LanguageContext.jsx";
 
 export default function RegisterScreen() {
   const { register } = useAuth();
+  const { lang } = useLanguage();
+  const isHi = lang === "hi";
+
   const navigate = useNavigate();
 
   const [form, setForm] = useState({
@@ -96,7 +21,6 @@ export default function RegisterScreen() {
     age: "",
     gender: "",
     interest_tag: "",
-    // 🔴 NEW FIELDS
     disability: "",
     occupation: "",
     income_bracket: "",
@@ -118,7 +42,11 @@ export default function RegisterScreen() {
     setSuccessMsg("");
 
     if (!form.username || !form.password) {
-      setError("Username and password are required.");
+      setError(
+        isHi
+          ? "उपयोगकर्ता नाम और पासवर्ड आवश्यक हैं।"
+          : "Username and password are required."
+      );
       return;
     }
 
@@ -129,11 +57,17 @@ export default function RegisterScreen() {
         age: form.age ? Number(form.age) : null,
       };
       await register(payload);
-      setSuccessMsg("Registration successful. You can now login.");
+      setSuccessMsg(
+        isHi
+          ? "पंजीकरण सफल रहा। अब आप लॉगिन कर सकते हैं।"
+          : "Registration successful. You can now login."
+      );
       setTimeout(() => navigate("/login"), 800);
     } catch (err) {
       console.error(err);
-      setError(err.message || "Registration failed");
+      setError(
+        isHi ? "पंजीकरण असफल रहा, कृपया फिर से प्रयास करें।" : err.message || "Registration failed"
+      );
     } finally {
       setSubmitting(false);
     }
@@ -143,11 +77,12 @@ export default function RegisterScreen() {
     <section className="flex justify-center mt-8 px-4">
       <div className="w-full max-w-lg bg-white rounded-3xl shadow-soft border border-cardBorder px-6 py-6 space-y-4 text-left">
         <h1 className="text-xl font-semibold text-textMain">
-          Create your account
+          {isHi ? "अपना खाता बनाएँ" : "Create your account"}
         </h1>
         <p className="text-[12px] text-gray-600">
-          Fill basic details so we can recommend right schemes & trainings for
-          you.
+          {isHi
+            ? "कुछ मूल जानकारी भरें ताकि हम आपके लिए सही योजनाएँ और प्रशिक्षण सुझा सकें।"
+            : "Fill basic details so we can recommend right schemes & trainings for you."}
         </p>
 
         <form
@@ -158,7 +93,7 @@ export default function RegisterScreen() {
           <div className="space-y-3">
             <div className="space-y-1">
               <label className="block text-[11px] font-medium text-gray-700">
-                Username *
+                {isHi ? "उपयोगकर्ता नाम *" : "Username *"}
               </label>
               <input
                 name="username"
@@ -170,7 +105,7 @@ export default function RegisterScreen() {
 
             <div className="space-y-1">
               <label className="block text-[11px] font-medium text-gray-700">
-                Password *
+                {isHi ? "पासवर्ड *" : "Password *"}
               </label>
               <input
                 type="password"
@@ -183,7 +118,7 @@ export default function RegisterScreen() {
 
             <div className="space-y-1">
               <label className="block text-[11px] font-medium text-gray-700">
-                Full Name
+                {isHi ? "पूरा नाम" : "Full Name"}
               </label>
               <input
                 name="full_name"
@@ -195,7 +130,7 @@ export default function RegisterScreen() {
 
             <div className="space-y-1">
               <label className="block text-[11px] font-medium text-gray-700">
-                Age
+                {isHi ? "आयु" : "Age"}
               </label>
               <input
                 type="number"
@@ -211,7 +146,7 @@ export default function RegisterScreen() {
           <div className="space-y-3">
             <div className="space-y-1">
               <label className="block text-[11px] font-medium text-gray-700">
-                District
+                {isHi ? "ज़िला (District)" : "District"}
               </label>
               <input
                 name="district"
@@ -223,7 +158,7 @@ export default function RegisterScreen() {
 
             <div className="space-y-1">
               <label className="block text-[11px] font-medium text-gray-700">
-                Block
+                {isHi ? "ब्लॉक (Block)" : "Block"}
               </label>
               <input
                 name="block"
@@ -235,7 +170,7 @@ export default function RegisterScreen() {
 
             <div className="space-y-1">
               <label className="block text-[11px] font-medium text-gray-700">
-                Village Code
+                {isHi ? "गाँव कोड (Village Code)" : "Village Code"}
               </label>
               <input
                 name="village_code"
@@ -247,7 +182,7 @@ export default function RegisterScreen() {
 
             <div className="space-y-1">
               <label className="block text-[11px] font-medium text-gray-700">
-                Gender
+                {isHi ? "लिंग (Gender)" : "Gender"}
               </label>
               <select
                 name="gender"
@@ -255,19 +190,25 @@ export default function RegisterScreen() {
                 onChange={handleChange}
                 className="w-full px-3 py-2 rounded-xl border border-gray-300 text-sm outline-none focus:border-emerald-500"
               >
-                <option value="">Select</option>
-                <option value="Female">Female</option>
-                <option value="Male">Male</option>
-                <option value="Other">Other</option>
+                <option value="">{isHi ? "चुनें" : "Select"}</option>
+                <option value="Female">
+                  {isHi ? "महिला (Female)" : "Female"}
+                </option>
+                <option value="Male">
+                  {isHi ? "पुरुष (Male)" : "Male"}
+                </option>
+                <option value="Other">
+                  {isHi ? "अन्य (Other)" : "Other"}
+                </option>
               </select>
             </div>
           </div>
 
-          {/* 🔴 NEW: disability, occupation, income, social category */}
+          {/* Extra fields */}
           <div className="sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-3 mt-1">
             <div className="space-y-1">
               <label className="block text-[11px] font-medium text-gray-700">
-                Disability (if any)
+                {isHi ? "विकलांगता (यदि हो)" : "Disability (if any)"}
               </label>
               <select
                 name="disability"
@@ -275,18 +216,32 @@ export default function RegisterScreen() {
                 onChange={handleChange}
                 className="w-full px-3 py-2 rounded-xl border border-gray-300 text-sm outline-none focus:border-emerald-500"
               >
-                <option value="">None / Prefer not to say</option>
-                <option value="locomotor">Locomotor disability</option>
-                <option value="visual">Visual impairment</option>
-                <option value="hearing">Hearing impairment</option>
-                <option value="intellectual">Intellectual / learning</option>
-                <option value="multiple">Multiple disabilities</option>
+                <option value="">
+                  {isHi
+                    ? "नहीं / बताना नहीं चाहते"
+                    : "None / Prefer not to say"}
+                </option>
+                <option value="locomotor">
+                  {isHi ? "चलने-फिरने में समस्या (Locomotor)" : "Locomotor disability"}
+                </option>
+                <option value="visual">
+                  {isHi ? "दृष्टि बाधित (Visual)" : "Visual impairment"}
+                </option>
+                <option value="hearing">
+                  {isHi ? "श्रवण बाधित (Hearing)" : "Hearing impairment"}
+                </option>
+                <option value="intellectual">
+                  {isHi ? "बौद्धिक विकलांगता" : "Intellectual / learning"}
+                </option>
+                <option value="multiple">
+                  {isHi ? "एक से अधिक (Multiple)" : "Multiple disabilities"}
+                </option>
               </select>
             </div>
 
             <div className="space-y-1">
               <label className="block text-[11px] font-medium text-gray-700">
-                Occupation
+                {isHi ? "पेशा (Occupation)" : "Occupation"}
               </label>
               <select
                 name="occupation"
@@ -294,21 +249,37 @@ export default function RegisterScreen() {
                 onChange={handleChange}
                 className="w-full px-3 py-2 rounded-xl border border-gray-300 text-sm outline-none focus:border-emerald-500"
               >
-                <option value="">Select</option>
-                <option value="farmer">Farmer</option>
-                <option value="student">Student</option>
-                <option value="anganwadi">Anganwadi worker</option>
-                <option value="asha">ASHA / health worker</option>
-                <option value="shg_member">SHG member</option>
-                <option value="labour">Daily wage labour</option>
-                <option value="homemaker">Homemaker</option>
-                <option value="other">Other</option>
+                <option value="">{isHi ? "चुनें" : "Select"}</option>
+                <option value="farmer">
+                  {isHi ? "किसान (Farmer)" : "Farmer"}
+                </option>
+                <option value="student">
+                  {isHi ? "छात्र / छात्रा (Student)" : "Student"}
+                </option>
+                <option value="anganwadi">
+                  {isHi ? "आंगनवाड़ी कार्यकर्ता" : "Anganwadi worker"}
+                </option>
+                <option value="asha">
+                  {isHi ? "आशा / स्वास्थ्य कार्यकर्ता" : "ASHA / health worker"}
+                </option>
+                <option value="shg_member">
+                  {isHi ? "एसएचजी सदस्य" : "SHG member"}
+                </option>
+                <option value="labour">
+                  {isHi ? "दैनिक मज़दूर (Daily wage labour)" : "Daily wage labour"}
+                </option>
+                <option value="homemaker">
+                  {isHi ? "गृहणी (Homemaker)" : "Homemaker"}
+                </option>
+                <option value="other">
+                  {isHi ? "अन्य (Other)" : "Other"}
+                </option>
               </select>
             </div>
 
             <div className="space-y-1">
               <label className="block text-[11px] font-medium text-gray-700">
-                Income Bracket
+                {isHi ? "आय वर्ग (Income Bracket)" : "Income Bracket"}
               </label>
               <select
                 name="income_bracket"
@@ -316,17 +287,25 @@ export default function RegisterScreen() {
                 onChange={handleChange}
                 className="w-full px-3 py-2 rounded-xl border border-gray-300 text-sm outline-none focus:border-emerald-500"
               >
-                <option value="">Select</option>
-                <option value="BPL">BPL / Antyodaya</option>
-                <option value="APL">APL</option>
-                <option value="lower_middle">Lower middle</option>
-                <option value="middle">Middle</option>
+                <option value="">{isHi ? "चुनें" : "Select"}</option>
+                <option value="BPL">
+                  {isHi ? "बीपीएल / अंत्योदय" : "BPL / Antyodaya"}
+                </option>
+                <option value="APL">
+                  {isHi ? "एपीएल (APL)" : "APL"}
+                </option>
+                <option value="lower_middle">
+                  {isHi ? "निम्न मध्यम वर्ग" : "Lower middle"}
+                </option>
+                <option value="middle">
+                  {isHi ? "मध्यम वर्ग" : "Middle"}
+                </option>
               </select>
             </div>
 
             <div className="space-y-1">
               <label className="block text-[11px] font-medium text-gray-700">
-                Social Category
+                {isHi ? "सामाजिक वर्ग (Social Category)" : "Social Category"}
               </label>
               <select
                 name="social_category"
@@ -334,25 +313,37 @@ export default function RegisterScreen() {
                 onChange={handleChange}
                 className="w-full px-3 py-2 rounded-xl border border-gray-300 text-sm outline-none focus:border-emerald-500"
               >
-                <option value="">Select</option>
-                <option value="SC">SC</option>
-                <option value="ST">ST</option>
-                <option value="OBC">OBC</option>
-                <option value="General">General</option>
+                <option value="">{isHi ? "चुनें" : "Select"}</option>
+                <option value="SC">
+                  {isHi ? "अनुसूचित जाति (SC)" : "SC"}
+                </option>
+                <option value="ST">
+                  {isHi ? "अनुसूचित जनजाति (ST)" : "ST"}
+                </option>
+                <option value="OBC">
+                  {isHi ? "ओबीसी (OBC)" : "OBC"}
+                </option>
+                <option value="General">
+                  {isHi ? "सामान्य (General)" : "General"}
+                </option>
               </select>
             </div>
           </div>
 
-          
+          {/* Interest Tag */}
           <div className="space-y-1">
             <label className="block text-[11px] font-medium text-gray-700">
-              Interest Tag
+              {isHi ? "रुचि टैग (Interest Tag)" : "Interest Tag"}
             </label>
             <input
               name="interest_tag"
               value={form.interest_tag}
               onChange={handleChange}
-              placeholder="farmer, student, SHG member..."
+              placeholder={
+                isHi
+                  ? "किसान, छात्र, एसएचजी सदस्य..."
+                  : "farmer, student, SHG member..."
+              }
               className="w-full px-3 py-2 rounded-xl border border-gray-300 text-sm outline-none focus:border-emerald-500"
             />
           </div>
@@ -375,17 +366,23 @@ export default function RegisterScreen() {
               disabled={submitting}
               className="w-full inline-flex items-center justify-center px-4 py-2 rounded-xl bg-[#166534] text-white text-sm font-semibold disabled:opacity-60"
             >
-              {submitting ? "Creating account..." : "Register"}
+              {submitting
+                ? isHi
+                  ? "खाता बनाया जा रहा है..."
+                  : "Creating account..."
+                : isHi
+                ? "रजिस्टर करें"
+                : "Register"}
             </button>
 
             <p className="text-[11px] text-gray-600 mt-1">
-              Already have an account?{" "}
+              {isHi ? "पहले से खाता है?" : "Already have an account?"}{" "}
               <button
                 type="button"
                 onClick={() => navigate("/login")}
                 className="text-[#166534] underline"
               >
-                Login
+                {isHi ? "लॉगिन करें" : "Login"}
               </button>
             </p>
           </div>

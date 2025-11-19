@@ -38,7 +38,7 @@ export default function HomeScreen() {
         {/* Greeting */}
         <div className="space-y-1">
           <div className="text-4xl font-semibold text-textMain">
-            नमस्ते! मैं आपकी पंचायत सहायिका हूं.
+            नमस्ते! मैं आपकी पंचायत सहायिका हूं।
           </div>
           <div className="text-xl font-semibold text-primary">
             Namaste! I am your Panchayat Sahayika.

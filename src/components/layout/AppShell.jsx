@@ -61,7 +61,7 @@ export default function AppShell({ children }) {
       <HeaderMain />
 
       {/* Main area: full width, no mx-auto / no px-6 */}
-      <main className="flex-1 overflow-hidden">
+      <main className="flex-1 overflow-auto">
         {/* If routing uses children, use children. If using <Outlet />, fallback to Outlet */}
         {children || <Outlet />}
       </main>
