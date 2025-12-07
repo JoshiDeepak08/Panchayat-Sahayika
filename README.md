@@ -1,10 +1,10 @@
-# 🌾 **Panchayat-Sahayika (AI-Powered Rural Governance Assistant)**
+#  **Panchayat-Sahayika (AI-Powered Rural Governance Assistant)**
 
 A multilingual (Hindi + English) AI assistant designed for rural development governance, enabling Gram Panchayats to access scheme information, analyze village deficits, retrieve government documents, and generate actionable development insights using **FastAPI**, **Qdrant Vector DB**, **Neo4j Knowledge Graph**, **LLMs**, and a modern **React + Tailwind** frontend.
 
 **Demo Video:** [https://youtu.be/SvaaQusU9nU?si=S9WfEV2PBO07HTdO](https://youtu.be/SvaaQusU9nU?si=S9WfEV2PBO07HTdO)
 
-![Uploading image.png…]()
+<img width="1366" height="619" alt="image" src="https://github.com/user-attachments/assets/0699ca21-c6e9-4714-a9f1-aa701164a9de" />
 
 ---
 
